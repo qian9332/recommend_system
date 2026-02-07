@@ -1,0 +1,1 @@
+# Quick smoke test script

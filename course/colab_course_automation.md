@@ -1,0 +1,1 @@
+# Colab course automation details

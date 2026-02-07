@@ -1,0 +1,1 @@
+# Content for make_slide_video.sh
