@@ -1,0 +1,72 @@
+[
+  {
+    "epoch": 1,
+    "loss": 2.1798,
+    "pos_sim": -0.6532,
+    "neg_sim": -0.6955,
+    "stage": "INC\u9636\u6bb5"
+  },
+  {
+    "epoch": 2,
+    "loss": 1.4154,
+    "pos_sim": 3.5751,
+    "neg_sim": 1.2237,
+    "stage": "INC\u9636\u6bb5"
+  },
+  {
+    "epoch": 3,
+    "loss": 2.1288,
+    "pos_sim": 8.3811,
+    "neg_sim": 8.1383,
+    "stage": "In-Batch\u9636\u6bb5"
+  },
+  {
+    "epoch": 4,
+    "loss": 1.7847,
+    "pos_sim": 7.2884,
+    "neg_sim": 5.8367,
+    "stage": "In-Batch\u9636\u6bb5"
+  },
+  {
+    "epoch": 5,
+    "loss": 1.3495,
+    "pos_sim": 7.6443,
+    "neg_sim": 4.7365,
+    "stage": "In-Batch\u9636\u6bb5"
+  },
+  {
+    "epoch": 6,
+    "loss": 0.8719,
+    "pos_sim": 8.3346,
+    "neg_sim": 3.0073,
+    "stage": "In-Batch\u9636\u6bb5"
+  },
+  {
+    "epoch": 7,
+    "loss": 0.6652,
+    "pos_sim": 8.6905,
+    "neg_sim": 2.0174,
+    "stage": "In-Batch\u9636\u6bb5"
+  },
+  {
+    "epoch": 8,
+    "loss": 0.4136,
+    "pos_sim": 8.6842,
+    "neg_sim": 0.5609,
+    "stage": "In-Batch\u9636\u6bb5"
+  },
+  {
+    "epoch": 9,
+    "loss": 2.1048,
+    "pos_sim": 7.2897,
+    "neg_sim": 6.3772,
+    "stage": "\u96be\u8d1f\u4f8b\u9636\u6bb5"
+  },
+  {
+    "epoch": 10,
+    "loss": 2.2689,
+    "pos_sim": 6.3612,
+    "neg_sim": 5.628,
+    "stage": "\u96be\u8d1f\u4f8b\u9636\u6bb5"
+  }
+]
