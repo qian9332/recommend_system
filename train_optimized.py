@@ -1,7 +1,7 @@
 """
 双塔语义召回模型 - 高效优化版
 实现四种负采样策略 + 分阶段混合采样
-优化: 批量TopK + 预计算历史序列 + 缓存正例Tensor
+优化: 批量TopK + 预计算历史序列（移除正例mask避免OOM）
 """
 
 import os
@@ -115,22 +115,12 @@ class TwoTowerModel(nn.Module):
 # ==================== 负采样器（优化版）====================
 
 class NegativeSampler:
-    """优化版负采样器：批量TopK + 缓存正例Tensor"""
+    """优化版负采样器：批量TopK"""
     
-    def __init__(self, num_items, user_inc_items, user_positive_items, num_users, device):
+    def __init__(self, num_items, user_inc_items, user_positive_items):
         self.num_items = num_items
         self.user_inc_items = user_inc_items
-        self.user_positive_items = user_positive_items
-        self.device = device
-        
-        # 优化：预构建正例mask tensor
-        print("构建正例mask tensor...")
-        self.positive_mask = torch.zeros(num_users, num_items, dtype=torch.bool, device=device)
-        for uid, items in tqdm(user_positive_items.items(), desc="构建mask"):
-            if uid < num_users:
-                for item in items:
-                    if 0 < item < num_items:
-                        self.positive_mask[uid, item] = True
+        self.user_positive_items = user_positive_items  # 保留字典形式，避免OOM
     
     def random_negative(self, batch_size, num_neg, device):
         return torch.randint(1, self.num_items, (batch_size, num_neg), device=device)
@@ -172,8 +162,8 @@ class NegativeSampler:
         
         return torch.stack(neg_items)
     
-    def hard_negative_optimized(self, user_vectors, all_item_vectors, user_ids, num_neg):
-        """优化版难负例挖掘：批量TopK，无Python循环"""
+    def hard_negative_optimized(self, user_vectors, all_item_vectors, user_ids, num_neg, device):
+        """优化版难负例挖掘：批量TopK"""
         batch_size = user_vectors.size(0)
         
         # 归一化
@@ -186,27 +176,30 @@ class NegativeSampler:
         # 优化：批量TopK，一次完成 [B, K]
         top_k = similarities.topk(num_neg * 2, dim=1).indices
         
-        # 优化：使用预构建的mask过滤正例
+        # 过滤正例（使用字典，避免OOM）
         neg_items = []
         for i in range(batch_size):
             uid = int(user_ids[i].item())
+            positive_items = self.user_positive_items.get(uid, set())
             top_k_items = top_k[i] + 1  # +1因为0是padding
             
-            # 使用mask快速过滤
-            if uid < self.positive_mask.size(0):
-                is_positive = self.positive_mask[uid, top_k_items]
-                valid_neg = top_k_items[~is_positive][:num_neg]
-            else:
-                valid_neg = top_k_items[:num_neg]
+            # 过滤正例
+            valid_neg = []
+            for item_id in top_k_items.cpu().numpy():
+                if item_id not in positive_items and item_id < self.num_items:
+                    valid_neg.append(item_id)
+                    if len(valid_neg) >= num_neg:
+                        break
             
             # 不够则补充随机
-            if len(valid_neg) < num_neg:
-                random_neg = torch.randint(1, self.num_items, (num_neg - len(valid_neg),), device=self.device)
-                valid_neg = torch.cat([valid_neg, random_neg])
+            while len(valid_neg) < num_neg:
+                rand_item = random.randint(1, self.num_items - 1)
+                if rand_item not in positive_items and rand_item not in valid_neg:
+                    valid_neg.append(rand_item)
             
             neg_items.append(valid_neg[:num_neg])
         
-        return torch.stack(neg_items)
+        return torch.tensor(neg_items, device=device, dtype=torch.long)
 
 
 # ==================== 训练器 ====================
@@ -224,13 +217,13 @@ class Trainer:
         self.stage_config = {
             'stage1': {'ratio': 0.2, 'main_strategy': 'inc', 'random_ratio': 0.1},
             'stage2': {'ratio': 0.7, 'main_strategy': 'inbatch', 'random_ratio': 0.05},
-            'stage3': {'ratio': 0.1, 'main_strategy': 'hard', 'random_ratio': 0.05}  # 减少到10%
+            'stage3': {'ratio': 0.1, 'main_strategy': 'hard', 'random_ratio': 0.05}
         }
     
     def get_current_stage(self, progress):
         if progress < 0.2:
             return 'stage1'
-        elif progress < 0.9:  # 调整
+        elif progress < 0.9:
             return 'stage2'
         else:
             return 'stage3'
@@ -284,9 +277,8 @@ class Trainer:
             elif config['main_strategy'] == 'inbatch':
                 main_neg = self.neg_sampler.inbatch_negative(item_ids, main_num_neg)
             else:
-                # 优化：使用批量TopK版本
                 main_neg = self.neg_sampler.hard_negative_optimized(
-                    user_vec.detach(), all_item_vectors, user_ids, main_num_neg
+                    user_vec.detach(), all_item_vectors, user_ids, main_num_neg, self.device
                 )
             
             random_neg = self.neg_sampler.random_negative(batch_size, random_num_neg, self.device)
@@ -493,15 +485,13 @@ def main(sample_ratio=1.0, epochs=20, temperature=0.05, lr=0.001):
     print("【模型训练】")
     print("=" * 70)
     
-    # 优化：使用预计算历史序列的数据集
     train_dataset = TaobaoDataset(train_data, user_history)
     train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True, num_workers=0)
     
     model = TwoTowerModel(num_users, num_items, embed_dim=64).to(device)
     print(f"模型参数: {sum(p.numel() for p in model.parameters()):,}")
     
-    # 优化：构建负采样器时传入num_users和device
-    neg_sampler = NegativeSampler(num_items, dict(user_inc_items), dict(user_positive_items), num_users, device)
+    neg_sampler = NegativeSampler(num_items, dict(user_inc_items), dict(user_positive_items))
     trainer = Trainer(model, neg_sampler, device, temperature=temperature)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)

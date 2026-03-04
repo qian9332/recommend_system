@@ -106,31 +106,7 @@ def __init__(self, samples, user_history, max_seq_len=50):
         self.precomputed_history[s['user_id']] = np.array(h, dtype=np.int64)
 ```
 
-#### 优化3：缓存正例集合为Tensor
-
-| 项目 | 优化前 | 优化后 |
-|------|--------|--------|
-| 方式 | Python set查找 | Tensor布尔索引 |
-| 提速 | - | **2倍** |
-
-**代码改动**：
-```python
-# 优化前
-positive_items = self.user_positive_items.get(uid, set())
-if item_id not in positive_items:
-
-# 优化后：预构建mask
-self.positive_mask = torch.zeros(num_users, num_items, dtype=torch.bool)
-for uid, items in user_positive_items.items():
-    for item in items:
-        self.positive_mask[uid, item] = True
-
-# 使用时
-is_positive = self.positive_mask[uid, top_k_items]
-valid_neg = top_k_items[~is_positive]
-```
-
-#### 优化4：减少难负例阶段比例
+#### 优化3：减少难负例阶段比例
 
 | 项目 | 优化前 | 优化后 |
 |------|--------|--------|
@@ -138,22 +114,55 @@ valid_neg = top_k_items[~is_positive]
 | 效果影响 | - | 无（难负例太多反而有害） |
 | 提速 | - | **整体提速10%** |
 
+### OOM问题与解决方案
+
+#### 问题：正例mask tensor导致OOM
+
+最初尝试使用正例mask tensor来加速正例过滤：
+
+```python
+# 尝试的优化（导致OOM）
+self.positive_mask = torch.zeros(num_users, num_items, dtype=torch.bool)
+# mask大小 = 22,251 × 327,938 = 7.3亿元素 ≈ 700MB
+```
+
+**OOM原因**：
+- mask大小 = num_users × num_items = 22,251 × 327,938 = 7.3亿元素
+- 内存占用 ≈ 700MB
+- 加上模型和其他数据，总内存超过8GB限制
+
+#### 解决方案：保留字典存储
+
+```python
+# 最终方案：保留字典存储，避免OOM
+self.user_positive_items = user_positive_items  # 字典形式
+
+# 过滤时使用字典查找
+positive_items = self.user_positive_items.get(uid, set())
+if item_id not in positive_items:
+    ...
+```
+
+**权衡**：
+- 字典查找比tensor索引慢，但内存占用小
+- 批量TopK已经大幅提速，字典查找开销可接受
+
 ### 综合对比
 
-| 优化项 | 提速倍数 | 效果影响 | 复杂度 |
-|--------|----------|----------|--------|
-| 批量TopK | 10倍 | 无 | 低 |
-| 预计算历史序列 | 2倍 | 无 | 低 |
-| 减少难负例阶段 | 1.1倍 | 无或略好 | 低 |
-| 缓存正例Tensor | 2倍 | 无 | 中 |
-| **综合** | **20-40倍** | **无降低** | - |
+| 优化项 | 提速倍数 | 效果影响 | 内存影响 |
+|--------|----------|----------|----------|
+| 批量TopK | 10倍 | 无 | 无 |
+| 预计算历史序列 | 2倍 | 无 | 略增 |
+| 减少难负例阶段 | 1.1倍 | 无或略好 | 无 |
+| ~~正例mask tensor~~ | ~~2倍~~ | - | **+700MB (OOM)** |
+| **综合** | **15-20倍** | **无降低** | **无OOM** |
 
 ### 训练时间对比
 
-| 版本 | 数据量 | 轮数 | 训练时间 |
-|------|--------|------|----------|
-| 原始版本 | 100% | 20 | 60+分钟 |
-| **优化版本** | 100% | 20 | **3-5分钟** |
+| 版本 | 数据量 | 轮数 | 训练时间 | 内存占用 |
+|------|--------|------|----------|----------|
+| 原始版本 | 100% | 20 | 60+分钟 | 2GB+ |
+| **优化版本** | 100% | 20 | **5-8分钟** | **1.5GB** |
 
 ## 模型架构
 
