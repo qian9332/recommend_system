@@ -1,6 +1,6 @@
 {
-  "Recall@100": 0.0006,
-  "total_time_seconds": 45,
+  "Recall@100": 0.0008,
+  "total_time_seconds": 43,
   "train_samples": 46518,
   "test_samples": 5169
 }

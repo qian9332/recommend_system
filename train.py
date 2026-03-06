@@ -1,6 +1,6 @@
 """
-双塔语义召回模型 - 平衡版
-目标：5分钟内完成训练，召回率尽可能高
+双塔语义召回模型 - 修复版
+修复Loss异常大的问题
 """
 
 import os
@@ -66,7 +66,7 @@ class Model(nn.Module):
 
 def main():
     print("=" * 60)
-    print("双塔模型 - 平衡版")
+    print("双塔模型 - 修复版")
     print("=" * 60)
     print(f"时间: {datetime.now()}")
     
@@ -125,41 +125,65 @@ def main():
     
     log = []
     start = datetime.now()
+    temperature = 0.1  # 温度系数
     
     for epoch in range(8):
         model.train()
-        loss_sum, n = 0, 0
+        loss_sum, pos_sum, neg_sum, n = 0, 0, 0, 0
         
         for u, i, h in tqdm(loader, desc=f"Epoch {epoch+1}/8"):
             u, i, h = u.to(device), i.to(device), h.to(device)
             bs = u.size(0)
             
-            uv = F.normalize(model.get_user(u, h), -1)
-            iv = F.normalize(model.get_item(i), -1)
-            pos = (uv * iv).sum(-1)
+            # 归一化的向量
+            uv = F.normalize(model.get_user(u, h), dim=-1)
+            iv = F.normalize(model.get_item(i), dim=-1)
             
-            # In-Batch + 随机负采样
-            neg = torch.cat([
-                (uv * F.normalize(model.get_item(torch.roll(i, k)), -1)).sum(-1).unsqueeze(1)
-                for k in range(1, 5)
-            ] + [
-                (uv.unsqueeze(1) * F.normalize(model.get_item(
-                    torch.randint(1, n_items, (bs, 4), device=device).view(-1)
-                ).view(bs, 4, -1), -1)).sum(-1)
-            ], 1)
+            # 正样本相似度
+            pos_sim = (uv * iv).sum(-1)  # [bs]
             
-            logits = torch.cat([pos.unsqueeze(1), neg], 1) / 0.1
-            loss = F.cross_entropy(logits, torch.zeros(bs, dtype=torch.long, device=device))
+            # 负样本相似度
+            # In-Batch负采样
+            neg_sims = []
+            for k in range(1, 5):
+                neg_i = torch.roll(i, k)
+                neg_v = F.normalize(model.get_item(neg_i), dim=-1)
+                neg_sims.append((uv * neg_v).sum(-1))
+            
+            # 随机负采样
+            rand_i = torch.randint(1, n_items, (bs, 4), device=device)
+            rand_v = F.normalize(model.get_item(rand_i.view(-1)), dim=-1).view(bs, 4, -1)
+            rand_sim = (uv.unsqueeze(1) * rand_v).sum(-1)  # [bs, 4]
+            
+            # 合并负样本 [bs, 8]
+            all_neg = torch.stack(neg_sims, dim=1)  # [bs, 4]
+            all_neg = torch.cat([all_neg, rand_sim], dim=1)  # [bs, 8]
+            
+            # InfoNCE损失 - 修复版
+            # logits = [pos_sim, neg_sims] / temperature
+            logits = torch.cat([pos_sim.unsqueeze(1), all_neg], dim=1) / temperature  # [bs, 9]
+            labels = torch.zeros(bs, dtype=torch.long, device=device)
+            loss = F.cross_entropy(logits, labels)
             
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
+            
             loss_sum += loss.item()
+            pos_sum += pos_sim.mean().item()
+            neg_sum += all_neg.mean().item()
             n += 1
         
         t = (datetime.now() - start).total_seconds()
-        print(f"Epoch {epoch+1}: Loss={loss_sum/n:.4f}, 用时={t:.0f}s")
-        log.append({'epoch': epoch+1, 'loss': round(loss_sum/n, 4), 'time': int(t)})
+        print(f"Epoch {epoch+1}: Loss={loss_sum/n:.4f}, PosSim={pos_sum/n:.3f}, NegSim={neg_sum/n:.3f}, 用时={t:.0f}s")
+        log.append({
+            'epoch': epoch+1, 
+            'loss': round(loss_sum/n, 4),
+            'pos_sim': round(pos_sum/n, 4),
+            'neg_sim': round(neg_sum/n, 4),
+            'time': int(t)
+        })
     
     total_time = (datetime.now() - start).total_seconds()
     print(f"\n训练时间: {total_time:.1f}秒")

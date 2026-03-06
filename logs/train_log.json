@@ -1,42 +1,58 @@
 [
   {
     "epoch": 1,
-    "loss": 3909327.8268,
-    "time": 5
+    "loss": 2.1928,
+    "pos_sim": 0.0784,
+    "neg_sim": 0.0774,
+    "time": 6
   },
   {
     "epoch": 2,
-    "loss": 52254.3446,
+    "loss": 2.0141,
+    "pos_sim": 0.4814,
+    "neg_sim": 0.431,
     "time": 11
   },
   {
     "epoch": 3,
-    "loss": 46392.3105,
+    "loss": 1.3937,
+    "pos_sim": 0.6402,
+    "neg_sim": 0.3399,
     "time": 16
   },
   {
     "epoch": 4,
-    "loss": 29256.1256,
-    "time": 22
+    "loss": 0.6015,
+    "pos_sim": 0.709,
+    "neg_sim": 0.0705,
+    "time": 21
   },
   {
     "epoch": 5,
-    "loss": 19785.0343,
-    "time": 28
+    "loss": 0.3626,
+    "pos_sim": 0.7405,
+    "neg_sim": -0.032,
+    "time": 26
   },
   {
     "epoch": 6,
-    "loss": 9589.1898,
-    "time": 34
+    "loss": 0.2622,
+    "pos_sim": 0.7702,
+    "neg_sim": -0.0405,
+    "time": 31
   },
   {
     "epoch": 7,
-    "loss": 4841.1963,
-    "time": 39
+    "loss": 0.2071,
+    "pos_sim": 0.7916,
+    "neg_sim": -0.0404,
+    "time": 37
   },
   {
     "epoch": 8,
-    "loss": 2783.4633,
-    "time": 45
+    "loss": 0.1632,
+    "pos_sim": 0.8086,
+    "neg_sim": -0.0392,
+    "time": 43
   }
 ]
