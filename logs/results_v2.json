@@ -1,0 +1,14 @@
+{
+  "Recall@10": 0.0,
+  "Recall@50": 0.0002,
+  "Recall@100": 0.0004,
+  "total_time_seconds": 686,
+  "total_time_minutes": 11.44,
+  "train_samples": 86878,
+  "test_samples": 9654,
+  "n_users": 22213,
+  "n_items": 188076,
+  "epochs": 15,
+  "temperature": 0.05,
+  "model_dim": 128
+}
