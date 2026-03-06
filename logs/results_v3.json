@@ -1,0 +1,12 @@
+{
+  "Recall@10": 0.0001,
+  "Recall@50": 0.0009,
+  "Recall@100": 0.0017,
+  "total_time_seconds": 115,
+  "train_samples": 112646,
+  "test_samples": 39137,
+  "valid_test_samples": 26345,
+  "n_users": 22221,
+  "n_items": 110512,
+  "candidate_items": 59299
+}
